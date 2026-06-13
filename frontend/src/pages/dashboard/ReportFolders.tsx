@@ -66,13 +66,13 @@ function CreateModal({ hospitalId, onClose }: { hospitalId: string; onClose: () 
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && name.trim() && mutation.mutate()}
-          placeholder="e.g. Kidney Function Test, Blood Sugar, Thyroid Panel…"
+          placeholder="e.g. Blood Test, Diabetes"
           className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent mb-5"
         />
 
         <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5 text-xs text-amber-700">
-          <strong>Tip:</strong> Files uploaded here will be tagged with this exact folder name as
-          their report type — no AI guessing needed.
+          <strong>Supported folders:</strong> Blood Test (Hemoglobin, WBC, Platelet, RBC) and
+          Diabetes (Fasting Glucose, Post fasting glucose). Other folder names will not be extracted.
         </div>
 
         <div className="flex gap-3">
@@ -147,9 +147,8 @@ export default function ReportFolders() {
       <div className="bg-brand-50 border border-brand-100 rounded-2xl px-5 py-4 mb-6 flex items-start gap-3">
         <FileText className="w-5 h-5 text-brand-500 mt-0.5 shrink-0" />
         <p className="text-sm text-brand-800 leading-relaxed">
-          Create a folder for each report type <em>(e.g. Kidney Function Test, CBC, Thyroid Panel)</em>.
-          When you upload a file, its report type in the OCR extraction will automatically be set to
-          the folder name — no AI guessing.
+          Create a folder named <em>Blood Test</em> or <em>Diabetes</em>. OCR extracts only the
+          graph-ready values for that type.
         </p>
       </div>
 

@@ -56,19 +56,20 @@ async def run_ocr_for_document(document_id: str) -> None:
 
         # ── Step 5: determine document type from folder ───────────────────────
         doc_type = "prescription" if doc["folder"] == "prescriptions" else "report"
+        report_folder_name: str | None = doc.get("report_folder_name")
 
         # ── Step 6: run OCR in thread pool (blocking call) ────────────────────
+        # For reports, report_folder_name selects Blood Test or Diabetes extraction profile.
         ocr_data: dict = await asyncio.to_thread(
-            ocr_service.extract_from_file, tmp_path, doc_type
+            ocr_service.extract_from_file,
+            tmp_path,
+            doc_type,
+            report_folder_name,
         )
 
-        # ── Step 6b: override report_type with the user-defined sub-folder name ──
-        # This prevents the AI from guessing the report category (e.g. "KFT" vs
-        # "kidney function test"). The sub-folder name IS the authoritative type.
-        report_folder_name: str | None = doc.get("report_folder_name")
+        # Ensure report_type matches the sub-folder name on every page
         if report_folder_name and isinstance(ocr_data, dict):
             ocr_data["report_type"] = report_folder_name
-            # Handle multi-page PDFs where each page has its own dict
             if ocr_data.get("multi_page") and isinstance(ocr_data.get("pages"), list):
                 for page in ocr_data["pages"]:
                     if isinstance(page, dict):

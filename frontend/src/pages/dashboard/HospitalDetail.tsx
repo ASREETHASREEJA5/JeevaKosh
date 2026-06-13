@@ -19,7 +19,7 @@ const folders = [
   {
     key: 'reports',
     label: 'Reports',
-    description: 'Create folders by test type (Blood Test, Kidney Function, etc.) and upload reports. The folder name sets the OCR report type automatically.',
+    description: 'Create Blood Test or Diabetes folders and upload reports. OCR extracts graph-ready values only for those types.',
     icon: <FileText className="w-8 h-8" />,
     color: 'amber',
     bg: 'bg-amber-50',

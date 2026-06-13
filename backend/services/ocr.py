@@ -259,6 +259,185 @@ FINAL REMINDERS
   document_type_detected: "unreadable" and reason: "Image is completely illegible".
 """
 
+def _resolve_report_category(report_folder_name: str | None) -> str | None:
+    """
+    Map the user-defined report sub-folder name to a supported extraction profile.
+    Returns 'blood_test', 'diabetes', or None (unsupported).
+    """
+    if not report_folder_name:
+        return None
+    name = report_folder_name.strip().lower()
+    if "diabetes" in name or "diabetic" in name:
+        return "diabetes"
+    if "blood" in name or name in ("cbc", "complete blood count", "hematology"):
+        return "blood_test"
+    return None
+
+
+BLOOD_TEST_REPORT_PROMPT = """
+You are MedExtract-Report, specialized for BLOOD TEST / CBC / hematology lab reports ONLY.
+
+────────────────────────────────────────────────────────────────
+STEP 1 — VALIDATION
+────────────────────────────────────────────────────────────────
+This extraction profile is ONLY for Blood Test / CBC / hematology lab reports.
+
+If the document is NOT a blood test or CBC report (e.g. diabetes panel, kidney function,
+radiology, prescription, invoice):
+Return EXACTLY:
+{
+  "valid": false,
+  "document_type_detected": "<what it appears to be>",
+  "reason": "<one sentence why it is not a blood test report>",
+  "raw_text": "<verbatim transcription>"
+}
+
+If it IS a blood test / CBC report, continue below.
+
+────────────────────────────────────────────────────────────────
+ABSOLUTE RULES
+────────────────────────────────────────────────────────────────
+1. Extract ONLY what is VISIBLE. Never invent values.
+2. Use null for any field not found. Never use "" or "N/A".
+3. Do NOT extract any test other than the four listed below.
+4. Return ONLY valid JSON. No markdown fences.
+
+────────────────────────────────────────────────────────────────
+RESULTS — EXTRACT ONLY THESE 4 TESTS
+────────────────────────────────────────────────────────────────
+Populate the "results" object with EXACTLY these keys (use null if not visible):
+
+  "Hemoglobin"         — aliases: Hb, HGB, Haemoglobin
+  "WBC Count"          — aliases: WBC, Total WBC, White Blood Cell Count
+  "Platelet Count"     — aliases: PLT, Platelets, Platelet
+  "RBC Count"          — aliases: RBC, Red Blood Cell Count, Total RBC
+
+For each key, extract:
+  value            → numeric result exactly as printed (include < or > if present)
+  unit             → exactly as printed (g/dL, cells/cumm, etc.)
+  reference_range  → exactly as printed
+
+────────────────────────────────────────────────────────────────
+OUTPUT JSON SCHEMA
+────────────────────────────────────────────────────────────────
+{
+  "valid": true,
+  "document_type": "Medical Report",
+  "report_type": "Blood Test",
+  "extraction_warnings": [],
+  "patient_details": {
+    "name": null, "age": null, "gender": null, "patient_id": null
+  },
+  "dates": {
+    "report_date": null, "sample_collected_on": null
+  },
+  "institution_details": {
+    "name": null, "address": null
+  },
+  "results": {
+    "Hemoglobin":       { "value": null, "unit": null, "reference_range": null },
+    "WBC Count":        { "value": null, "unit": null, "reference_range": null },
+    "Platelet Count":   { "value": null, "unit": null, "reference_range": null },
+    "RBC Count":        { "value": null, "unit": null, "reference_range": null }
+  },
+  "raw_text": ""
+}
+
+Output ONLY the JSON object.
+"""
+
+DIABETES_REPORT_PROMPT = """
+You are MedExtract-Report, specialized for DIABETES / glucose lab reports ONLY.
+
+────────────────────────────────────────────────────────────────
+STEP 1 — VALIDATION
+────────────────────────────────────────────────────────────────
+This extraction profile is ONLY for diabetes or blood glucose test reports.
+
+If the document is NOT a diabetes / glucose report (e.g. CBC, kidney function,
+radiology, prescription, invoice):
+Return EXACTLY:
+{
+  "valid": false,
+  "document_type_detected": "<what it appears to be>",
+  "reason": "<one sentence why it is not a diabetes report>",
+  "raw_text": "<verbatim transcription>"
+}
+
+If it IS a diabetes / glucose report, continue below.
+
+────────────────────────────────────────────────────────────────
+ABSOLUTE RULES
+────────────────────────────────────────────────────────────────
+1. Extract ONLY what is VISIBLE. Never invent values.
+2. Use null for any field not found. Never use "" or "N/A".
+3. Do NOT extract any test other than the two listed below.
+4. Return ONLY valid JSON. No markdown fences.
+
+────────────────────────────────────────────────────────────────
+RESULTS — EXTRACT ONLY THESE 2 TESTS
+────────────────────────────────────────────────────────────────
+Populate the "results" object with EXACTLY these keys (use null if not visible):
+
+  "Fasting Glucose"       — aliases: FBS, Fasting Blood Sugar, FBG, Fasting Plasma Glucose
+  "Post fasting glucose"  — aliases: PPBS, Postprandial Glucose, PPG, Post Meal Glucose,
+                            Random Glucose if clearly post-meal context
+
+For each key, extract:
+  value            → numeric result exactly as printed
+  unit             → exactly as printed (usually mg/dL or mmol/L)
+  reference_range  → exactly as printed
+
+────────────────────────────────────────────────────────────────
+OUTPUT JSON SCHEMA
+────────────────────────────────────────────────────────────────
+{
+  "valid": true,
+  "document_type": "Medical Report",
+  "report_type": "Diabetes",
+  "extraction_warnings": [],
+  "patient_details": {
+    "name": null, "age": null, "gender": null, "patient_id": null
+  },
+  "dates": {
+    "report_date": null, "sample_collected_on": null
+  },
+  "institution_details": {
+    "name": null, "address": null
+  },
+  "results": {
+    "Fasting Glucose":      { "value": null, "unit": null, "reference_range": null },
+    "Post fasting glucose": { "value": null, "unit": null, "reference_range": null }
+  },
+  "raw_text": ""
+}
+
+Output ONLY the JSON object.
+"""
+
+UNSUPPORTED_REPORT_PROMPT = """
+You are MedExtract-Report. This system only processes Blood Test and Diabetes reports.
+
+The user uploaded this document to an unsupported report category.
+
+Return EXACTLY this JSON and nothing else:
+{
+  "valid": false,
+  "document_type_detected": "<best guess of document type>",
+  "reason": "Only Blood Test and Diabetes report folders are supported for extraction.",
+  "raw_text": "<verbatim transcription of all visible text>"
+}
+"""
+
+# Keys allowed in results per category (used for post-processing validation)
+BLOOD_TEST_RESULT_KEYS = ("Hemoglobin", "WBC Count", "Platelet Count", "RBC Count")
+DIABETES_RESULT_KEYS = ("Fasting Glucose", "Post fasting glucose")
+
+RESULT_KEYS_BY_CATEGORY = {
+    "blood_test": BLOOD_TEST_RESULT_KEYS,
+    "diabetes": DIABETES_RESULT_KEYS,
+}
+
 REPORT_PROMPT = """
 You are MedExtract-Report, a specialized AI for extracting structured data from medical reports ONLY.
  
@@ -542,31 +721,99 @@ def _parse_json_safe(text: str) -> Any:
         return {"parse_error": True, "raw_text": text}
 
 
+def _normalize_results_block(data: dict, category: str) -> dict:
+    """
+    Ensure the results object contains only the allowed keys for the category,
+    each with value / unit / reference_range — ready for graphing.
+    """
+    allowed = RESULT_KEYS_BY_CATEGORY.get(category, ())
+    raw_results = data.get("results") if isinstance(data.get("results"), dict) else {}
+
+    normalized: dict = {}
+    for key in allowed:
+        entry = raw_results.get(key) if isinstance(raw_results.get(key), dict) else {}
+        normalized[key] = {
+            "value": entry.get("value"),
+            "unit": entry.get("unit"),
+            "reference_range": entry.get("reference_range"),
+        }
+    data["results"] = normalized
+    # Remove legacy lab_results if the model added it anyway
+    data.pop("lab_results", None)
+    return data
+
+
+def _apply_report_category(data: Any, category: str, report_folder_name: str | None) -> Any:
+    """Post-process a single extraction dict for blood_test / diabetes profiles."""
+    if not isinstance(data, dict):
+        return data
+
+    if report_folder_name:
+        data["report_type"] = report_folder_name
+
+    if data.get("valid") is False:
+        return data
+
+    data = _normalize_results_block(data, category)
+    return data
+
+
+def _select_report_prompt(category: str | None) -> str:
+    if category == "blood_test":
+        return BLOOD_TEST_REPORT_PROMPT
+    if category == "diabetes":
+        return DIABETES_REPORT_PROMPT
+    return UNSUPPORTED_REPORT_PROMPT
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def extract_from_file(file_path: str, document_type: str) -> dict:
+def extract_from_file(
+    file_path: str,
+    document_type: str,
+    report_folder_name: str | None = None,
+) -> dict:
     """
     Run OCR extraction on *file_path* using the appropriate prompt.
 
     document_type must be "prescription" or "report".
+    report_folder_name: user-defined sub-folder name (required for report extraction).
+      Only "Blood Test" and "Diabetes" categories are supported for reports.
 
     Returns:
       - For a single image or single-page PDF: the parsed extraction dict.
       - For a multi-page PDF: {"multi_page": True, "page_count": N, "pages": [...]}
-
-    This function is synchronous and blocking; call it inside asyncio.to_thread
-    from async contexts.
     """
-    if document_type not in PROMPT_TEMPLATES:
+    if document_type not in PROMPT_TEMPLATES and document_type != "report":
         raise ValueError(
-            f"document_type must be one of {list(PROMPT_TEMPLATES)}; got '{document_type}'"
+            f"document_type must be 'prescription' or 'report'; got '{document_type}'"
         )
 
-    system_prompt = PROMPT_TEMPLATES[document_type]
+    report_category: str | None = None
+    if document_type == "report":
+        report_category = _resolve_report_category(report_folder_name)
+        system_prompt = _select_report_prompt(report_category)
+    else:
+        system_prompt = PROMPT_TEMPLATES[document_type]
     suffix = Path(file_path).suffix.lower()
 
     if suffix not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Unsupported file extension: {suffix}")
+
+    def _post_process(result: Any) -> Any:
+        if document_type != "report" or not report_category:
+            return result
+        if isinstance(result, dict) and result.get("multi_page"):
+            pages = result.get("pages", [])
+            result["pages"] = [
+                _apply_report_category(page, report_category, report_folder_name)
+                for page in pages
+                if isinstance(page, dict)
+            ]
+            return result
+        if isinstance(result, dict):
+            return _apply_report_category(result, report_category, report_folder_name)
+        return result
 
     if suffix == ".pdf":
         image_paths = _pdf_to_images(file_path)
@@ -580,16 +827,16 @@ def extract_from_file(file_path: str, document_type: str) -> dict:
                     if os.path.exists(image_path):
                         os.unlink(image_path)
         except Exception:
-            # Clean up remaining temp images on error
             for p in image_paths:
                 if os.path.exists(p):
                     os.unlink(p)
             raise
 
         if len(results) == 1:
-            return results[0]
-        return {"multi_page": True, "page_count": len(results), "pages": results}
+            return _post_process(results[0])
+        return _post_process(
+            {"multi_page": True, "page_count": len(results), "pages": results}
+        )
 
-    # Single image
     raw = _extract_with_gemma(file_path, system_prompt)
-    return _parse_json_safe(raw)
+    return _post_process(_parse_json_safe(raw))
