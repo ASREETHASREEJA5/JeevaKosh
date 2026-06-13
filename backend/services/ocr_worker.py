@@ -61,6 +61,18 @@ async def run_ocr_for_document(document_id: str) -> None:
             ocr_service.extract_from_file, tmp_path, doc_type
         )
 
+        # ── Step 6b: override report_type with the user-defined sub-folder name ──
+        # This prevents the AI from guessing the report category (e.g. "KFT" vs
+        # "kidney function test"). The sub-folder name IS the authoritative type.
+        report_folder_name: str | None = doc.get("report_folder_name")
+        if report_folder_name and isinstance(ocr_data, dict):
+            ocr_data["report_type"] = report_folder_name
+            # Handle multi-page PDFs where each page has its own dict
+            if ocr_data.get("multi_page") and isinstance(ocr_data.get("pages"), list):
+                for page in ocr_data["pages"]:
+                    if isinstance(page, dict):
+                        page["report_type"] = report_folder_name
+
         # ── Step 7: persist result ────────────────────────────────────────────
         await documents_col.update_one(
             {"_id": doc_id},

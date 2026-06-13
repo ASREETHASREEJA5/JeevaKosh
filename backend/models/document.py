@@ -17,6 +17,9 @@ class DocumentResponse(BaseModel):
     ocr_data: Optional[Any] = None
     ocr_error: Optional[str] = None
     ocr_completed_at: Optional[datetime] = None
+    # Report sub-folder fields (None for prescriptions)
+    report_folder_id: Optional[str] = None
+    report_folder_name: Optional[str] = None
 
 
 class DocumentListItem(BaseModel):
@@ -30,3 +33,5 @@ class DocumentListItem(BaseModel):
     file_size: int
     upload_date: datetime
     ocr_status: str
+    report_folder_id: Optional[str] = None
+    report_folder_name: Optional[str] = None

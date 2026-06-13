@@ -14,13 +14,31 @@ db = client[DB_NAME]
 fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name="medical_files")
 
 # Collections
+users_col = db["users"]
 hospitals_col = db["hospitals"]
 documents_col = db["documents"]
+report_folders_col = db["report_folders"]   # user-defined sub-folders inside Reports
 
 
 async def create_indexes() -> None:
-    """Create MongoDB indexes on first startup."""
-    await hospitals_col.create_index("slug", unique=True)
+    """Create / update MongoDB indexes on startup."""
+
+    # ── Users ─────────────────────────────────────────────────────────────────
+    await users_col.create_index("email", unique=True)
+
+    # ── Hospitals ──────────────────────────────────────────────────────────────
+    # Drop the old global slug index (pre-auth era) if it still exists.
+    try:
+        await hospitals_col.drop_index("slug_1")
+    except Exception:
+        pass  # index did not exist — that's fine
+
+    # Slug must be unique per user, not globally.
+    await hospitals_col.create_index(
+        [("user_id", 1), ("slug", 1)], unique=True
+    )
+
+    # ── Documents ─────────────────────────────────────────────────────────────
     await documents_col.create_index(
         [("hospital_id", 1), ("folder", 1), ("stored_filename", 1)],
         unique=True,
@@ -28,4 +46,40 @@ async def create_indexes() -> None:
     await documents_col.create_index(
         [("hospital_id", 1), ("folder", 1), ("upload_date", -1)]
     )
+    await documents_col.create_index("user_id")
     await documents_col.create_index("ocr_status")
+    await documents_col.create_index("report_folder_id")
+
+    # ── Report Folders ────────────────────────────────────────────────────────
+    # Subfolder name must be unique per hospital per user
+    await report_folders_col.create_index(
+        [("hospital_id", 1), ("user_id", 1), ("slug", 1)], unique=True
+    )
+
+
+async def purge_orphaned_records() -> None:
+    """
+    Remove hospitals and documents that have no user_id field.
+    These were created before authentication was added (e.g. via Swagger UI).
+    """
+    orphan_hospitals = await hospitals_col.find(
+        {"user_id": {"$exists": False}}
+    ).to_list(None)
+
+    for h in orphan_hospitals:
+        h_id = str(h["_id"])
+        # Cascade-delete associated documents and GridFS files
+        orphan_docs = await documents_col.find({"hospital_id": h_id}).to_list(None)
+        for d in orphan_docs:
+            try:
+                from bson import ObjectId
+                await fs_bucket.delete(ObjectId(d["file_id"]))
+            except Exception:
+                pass
+        await documents_col.delete_many({"hospital_id": h_id})
+
+    if orphan_hospitals:
+        await hospitals_col.delete_many({"user_id": {"$exists": False}})
+
+    # Also purge any orphaned documents not caught above
+    await documents_col.delete_many({"user_id": {"$exists": False}})

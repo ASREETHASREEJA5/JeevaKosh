@@ -1,22 +1,23 @@
 """
-Document routes.
+Document routes — all scoped to the authenticated user.
 
 POST   /hospitals/{hospital_id}/{folder}/upload  → upload file, trigger OCR
-GET    /hospitals/{hospital_id}/{folder}          → list documents (sorted newest first)
-GET    /documents/{document_id}                   → get document metadata + OCR result
-GET    /documents/{document_id}/preview           → stream file for in-browser preview
-DELETE /documents/{document_id}                   → delete document + GridFS file
+GET    /hospitals/{hospital_id}/{folder}          → list MY documents (sorted newest first)
+GET    /documents/{document_id}                   → get MY document
+GET    /documents/{document_id}/preview           → stream file for preview
+DELETE /documents/{document_id}                   → delete MY document
 """
 
 from datetime import datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from backend.database import documents_col, hospitals_col
 from backend.models.document import DocumentListItem, DocumentResponse
+from backend.services.auth import get_current_user, get_current_user_preview
 from backend.services.ocr_worker import run_ocr_for_document
 from backend.services.storage import (
     ALLOWED_MIME_TYPES,
@@ -74,6 +75,24 @@ def _doc_to_list_item(doc: dict) -> DocumentListItem:
     )
 
 
+async def _assert_hospital_owned(hospital_id: str, user_id: str) -> dict:
+    hospital = await hospitals_col.find_one(
+        {"_id": _parse_oid(hospital_id), "user_id": user_id}
+    )
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found.")
+    return hospital
+
+
+async def _get_owned_doc(document_id: str, user_id: str) -> dict:
+    doc = await documents_col.find_one(
+        {"_id": _parse_oid(document_id), "user_id": user_id}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return doc
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post(
@@ -85,53 +104,38 @@ async def upload_document(
     hospital_id: str,
     folder: str,
     background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
     file: UploadFile = File(...),
 ):
-    """
-    Upload a file (image or PDF) to the given folder of a hospital.
+    user_id = str(current_user["_id"])
 
-    - Validates hospital existence and folder name.
-    - Rejects unsupported MIME types and files over 20 MB.
-    - Auto-renames duplicates (e.g. report.pdf → report_1.pdf).
-    - Stores binary in GridFS, metadata in 'documents' collection.
-    - Triggers OCR extraction in the background automatically.
-    """
-    # ── Validate folder ───────────────────────────────────────────────────────
     if folder not in VALID_FOLDERS:
         raise HTTPException(
             status_code=400,
             detail=f"folder must be one of {sorted(VALID_FOLDERS)}.",
         )
 
-    # ── Validate hospital ─────────────────────────────────────────────────────
-    hospital = await hospitals_col.find_one({"_id": _parse_oid(hospital_id)})
-    if not hospital:
-        raise HTTPException(status_code=404, detail="Hospital not found.")
+    hospital = await _assert_hospital_owned(hospital_id, user_id)
 
-    # ── Validate MIME type ────────────────────────────────────────────────────
     mime_type = file.content_type or ""
     if mime_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=415,
-            detail=f"Unsupported file type '{mime_type}'. "
-                   f"Allowed: {list(ALLOWED_MIME_TYPES)}.",
+            detail=f"Unsupported file type '{mime_type}'. Allowed: {list(ALLOWED_MIME_TYPES)}.",
         )
 
-    # ── Read file content ─────────────────────────────────────────────────────
     content = await file.read()
     if len(content) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f"File too large. Maximum allowed size is {MAX_FILE_SIZE_BYTES // (1024*1024)} MB.",
+            detail=f"File too large. Maximum is {MAX_FILE_SIZE_BYTES // (1024*1024)} MB.",
         )
 
-    # ── Generate unique stored filename ───────────────────────────────────────
     original_filename = file.filename or f"upload{ALLOWED_MIME_TYPES[mime_type]}"
     stored_filename = await generate_unique_stored_filename(
         original_filename, hospital_id, folder
     )
 
-    # ── Save to GridFS ────────────────────────────────────────────────────────
     file_id = await save_file_to_gridfs(
         content=content,
         stored_filename=stored_filename,
@@ -140,8 +144,8 @@ async def upload_document(
         folder=folder,
     )
 
-    # ── Save metadata to documents collection ─────────────────────────────────
     doc_record = {
+        "user_id": user_id,
         "hospital_id": hospital_id,
         "hospital_name": hospital["name"],
         "folder": folder,
@@ -159,7 +163,6 @@ async def upload_document(
     result = await documents_col.insert_one(doc_record)
     doc_record["_id"] = result.inserted_id
 
-    # ── Trigger background OCR ────────────────────────────────────────────────
     background_tasks.add_task(run_ocr_for_document, str(result.inserted_id))
 
     return _doc_to_response(doc_record)
@@ -172,24 +175,24 @@ async def upload_document(
 async def list_documents(
     hospital_id: str,
     folder: str,
+    current_user: dict = Depends(get_current_user),
     skip: int = 0,
     limit: int = 50,
 ):
-    """
-    List documents in a hospital folder, sorted by upload date (newest first).
-    Supports pagination via skip and limit query params.
-    """
+    user_id = str(current_user["_id"])
+
     if folder not in VALID_FOLDERS:
         raise HTTPException(
             status_code=400,
             detail=f"folder must be one of {sorted(VALID_FOLDERS)}.",
         )
 
-    if not await hospitals_col.find_one({"_id": _parse_oid(hospital_id)}):
-        raise HTTPException(status_code=404, detail="Hospital not found.")
+    await _assert_hospital_owned(hospital_id, user_id)
 
     docs = (
-        await documents_col.find({"hospital_id": hospital_id, "folder": folder})
+        await documents_col.find(
+            {"hospital_id": hospital_id, "folder": folder, "user_id": user_id}
+        )
         .sort("upload_date", -1)
         .skip(skip)
         .limit(limit)
@@ -199,23 +202,23 @@ async def list_documents(
 
 
 @router.get("/documents/{document_id}", response_model=DocumentResponse)
-async def get_document(document_id: str):
-    """Return full document metadata including OCR result (if completed)."""
-    doc = await documents_col.find_one({"_id": _parse_oid(document_id)})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found.")
+async def get_document(
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["_id"])
+    doc = await _get_owned_doc(document_id, user_id)
     return _doc_to_response(doc)
 
 
 @router.get("/documents/{document_id}/preview")
-async def preview_document(document_id: str):
-    """
-    Stream the raw file from GridFS so it can be previewed in the browser.
-    Returns the file with appropriate Content-Type and inline disposition.
-    """
-    doc = await documents_col.find_one({"_id": _parse_oid(document_id)})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found.")
+async def preview_document(
+    document_id: str,
+    token: str | None = None,
+    current_user: dict = Depends(get_current_user_preview),
+):
+    user_id = str(current_user["_id"])
+    doc = await _get_owned_doc(document_id, user_id)
 
     return StreamingResponse(
         stream_file_from_gridfs(doc["file_id"]),
@@ -228,16 +231,17 @@ async def preview_document(document_id: str):
 
 
 @router.delete("/documents/{document_id}", status_code=200)
-async def delete_document(document_id: str):
-    """Delete a document's metadata and its GridFS binary."""
-    doc = await documents_col.find_one({"_id": _parse_oid(document_id)})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found.")
+async def delete_document(
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["_id"])
+    doc = await _get_owned_doc(document_id, user_id)
 
     try:
         await delete_file_from_gridfs(doc["file_id"])
     except Exception:
-        pass  # file may have already been removed from GridFS
+        pass
 
     await documents_col.delete_one({"_id": _parse_oid(document_id)})
     return {"message": f"Document '{doc['stored_filename']}' deleted."}
