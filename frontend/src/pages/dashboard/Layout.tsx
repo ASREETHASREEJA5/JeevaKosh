@@ -7,14 +7,16 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Sparkles,
   X,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 const navItems = [
-  { to: '/dashboard', label: 'Overview', icon: <LayoutDashboard className="w-5 h-5" />, end: true },
-  { to: '/dashboard/hospitals', label: 'Hospitals', icon: <Building2 className="w-5 h-5" />, end: false },
+  { to: '/dashboard',          label: 'Overview',   icon: <LayoutDashboard className="w-5 h-5" />, end: true  },
+  { to: '/dashboard/hospitals',label: 'Hospitals',  icon: <Building2 className="w-5 h-5" />,       end: false },
+  { to: '/dashboard/chat',     label: 'Medical AI', icon: <Sparkles className="w-5 h-5" />,        end: false },
 ]
 
 function Sidebar({ onClose }: { onClose?: () => void }) {

@@ -57,6 +57,56 @@ async def create_indexes() -> None:
     )
 
 
+async def create_vector_search_index() -> None:
+    """
+    Create (or confirm) the Atlas Vector Search index used by the RAG chatbot.
+
+    Index definition:
+      • 'embedding' field  → 4096-dim cosine vector search
+      • 'user_id'  field   → pre-filter so each user only searches their own docs
+
+    If the index already exists, Atlas raises an error that we silently ignore.
+    If the cluster does not support programmatic index creation (e.g. free M0 tier
+    via the Data API), create it manually in Atlas UI:
+        Atlas → your cluster → Search → Create Search Index → JSON Editor:
+
+        {
+          "fields": [
+            { "type": "vector", "path": "embedding",
+              "numDimensions": 4096, "similarity": "cosine" },
+            { "type": "filter", "path": "user_id" }
+          ]
+        }
+
+        Index name: vector_index   Collection: documents
+    """
+    try:
+        await documents_col.create_search_index(
+            {
+                "name": "vector_index",
+                "type": "vectorSearch",
+                "definition": {
+                    "fields": [
+                        {
+                            "type": "vector",
+                            "path": "embedding",
+                            "numDimensions": 4096,
+                            "similarity": "cosine",
+                        },
+                        {
+                            "type": "filter",
+                            "path": "user_id",
+                        },
+                    ]
+                },
+            }
+        )
+        print("[db] vector_index created on 'documents' collection.")
+    except Exception as exc:
+        # Duplicate index or cluster-level restriction — both are acceptable.
+        print(f"[db] vector_index skipped ({exc.__class__.__name__}: {exc})")
+
+
 async def purge_orphaned_records() -> None:
     """
     Remove hospitals and documents that have no user_id field.

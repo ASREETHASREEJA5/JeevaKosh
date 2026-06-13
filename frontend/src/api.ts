@@ -211,6 +211,70 @@ export const uploadToReportFolder = (
     .then(r => r.data)
 }
 
+// ── Chat / RAG API ────────────────────────────────────────────────────────────
+
+export interface SourceDoc {
+  hospital: string
+  type: string
+  filename: string
+  date: string
+  score: number
+}
+
+export type ChatSseEvent =
+  | { type: 'sources'; sources: SourceDoc[] }
+  | { type: 'text';    text: string }
+  | { type: 'error';   text: string }
+
+export interface ChatHistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/**
+ * Async generator that POSTs to /chat and yields parsed SSE events.
+ * Handles token injection, buffer management, and [DONE] termination.
+ */
+export async function* streamChat(
+  message: string,
+  history: ChatHistoryMessage[],
+  signal?: AbortSignal,
+): AsyncGenerator<ChatSseEvent> {
+  const token = getToken()
+  const res = await fetch(`${BASE_URL}/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ message, history }),
+    signal,
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`)
+  }
+
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop()!            // keep incomplete last line in buffer
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const payload = line.slice(6).trim()
+      if (payload === '[DONE]') return
+      try { yield JSON.parse(payload) as ChatSseEvent } catch { /* skip malformed */ }
+    }
+  }
+}
+
 // ── OCR API ───────────────────────────────────────────────────────────────────
 
 export const fetchOcrStatus = (id: string): Promise<OcrStatus> =>

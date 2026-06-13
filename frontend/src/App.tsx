@@ -10,6 +10,7 @@ import Hospitals from './pages/dashboard/Hospitals'
 import HospitalDetail from './pages/dashboard/HospitalDetail'
 import ReportFolders from './pages/dashboard/ReportFolders'
 import FolderView from './pages/dashboard/FolderView'
+import Chat from './pages/dashboard/Chat'
 
 /** Full-screen spinner shown while verifying the stored JWT on first load. */
 function AuthLoader() {
@@ -51,6 +52,7 @@ function AppRoutes() {
                   <Route path="hospitals/:hospitalId/prescriptions" element={<FolderView />} />
                   <Route path="hospitals/:hospitalId/reports" element={<ReportFolders />} />
                   <Route path="hospitals/:hospitalId/reports/:reportFolderId" element={<FolderView />} />
+                  <Route path="chat" element={<Chat />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

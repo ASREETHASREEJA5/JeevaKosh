@@ -16,6 +16,7 @@ from bson import ObjectId
 
 from backend.database import documents_col
 from backend.services import ocr as ocr_service
+from backend.services.embedding import get_document_embedding
 from backend.services.storage import read_file_bytes_from_gridfs
 
 
@@ -73,7 +74,17 @@ async def run_ocr_for_document(document_id: str) -> None:
                     if isinstance(page, dict):
                         page["report_type"] = report_folder_name
 
-        # ── Step 7: persist result ────────────────────────────────────────────
+        # ── Step 7: generate vector embedding from the extracted text ────────
+        # Runs in a thread pool (blocking HTTP call) so the event loop is free.
+        # Embedding failure is non-fatal — OCR result is still saved.
+        embedding: list[float] = []
+        try:
+            embedding = await asyncio.to_thread(get_document_embedding, ocr_data)
+        except Exception as emb_exc:
+            # Log but don't raise — embedding is optional; OCR data must be saved.
+            print(f"[embedding] warning: failed for {document_id}: {emb_exc}")
+
+        # ── Step 8: persist OCR result + embedding in a single atomic update ──
         await documents_col.update_one(
             {"_id": doc_id},
             {
@@ -82,6 +93,7 @@ async def run_ocr_for_document(document_id: str) -> None:
                     "ocr_data": ocr_data,
                     "ocr_completed_at": datetime.now(timezone.utc),
                     "ocr_error": None,
+                    "embedding": embedding,   # [] if embedding failed or text was empty
                 }
             },
         )
