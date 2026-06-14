@@ -3430,6 +3430,26 @@ textarea {
   border-left: 3px solid var(--border);
 }
 
+.aid-analysis-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2.5rem 2rem;
+  max-width: 480px;
+  gap: 0.5rem;
+}
+
+.aid-error-icon {
+  color: #f59e0b;
+  margin-bottom: 0.5rem;
+}
+
+.aid-analysis-error h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
 @media (max-width: 720px) {
   .aid-result-meta-grid,
   .aid-two-col,

@@ -275,6 +275,7 @@ export default function AiDiagnosis() {
   const [agentSpeaking, setAgentSpeaking] = useState(false);
 
   const [recState, setRecState] = useState("idle");
+  const [submitting, setSubmitting] = useState(false);
   const [transcript, setTranscript] = useState("");
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -282,6 +283,7 @@ export default function AiDiagnosis() {
 
   const [diagnosis, setDiagnosis] = useState(null);
   const [isEmergency, setIsEmergency] = useState(false);
+  const [processingError, setProcessingError] = useState(null);
 
   const startSession = useCallback(async () => {
     setStarting(true);
@@ -360,6 +362,8 @@ export default function AiDiagnosis() {
       setError("Please provide an answer before continuing.");
       return;
     }
+    if (submitting) return; // prevent double submission
+    setSubmitting(true);
     setError(null);
     try {
       const resp = await aiSubmitAnswer(sessionId, questionKey, transcript.trim());
@@ -370,16 +374,25 @@ export default function AiDiagnosis() {
       }
 
       if (resp.is_complete) {
+        setProcessingError(null);
         setScreen("processing");
-        const dx = await aiAnalyze(sessionId);
-        setDiagnosis(dx);
-        if (dx.urgency === "emergency") setIsEmergency(true);
-        setScreen("results");
+        try {
+          const dx = await aiAnalyze(sessionId);
+          setDiagnosis(dx);
+          if (dx.urgency === "emergency") setIsEmergency(true);
+          setScreen("results");
+        } catch (analyzeErr) {
+          // Analysis failed — return to interview screen with a clear message
+          const detail =
+            analyzeErr?.response?.data?.detail || analyzeErr.message || "Analysis failed";
+          setProcessingError(detail);
+          setScreen("analyze-error");
+        }
       } else {
         const nextIndex = questionIndex + 1;
         setQuestionIndex(nextIndex);
         setQuestionKey(QUESTION_KEYS[nextIndex]);
-        setQuestionText(resp.next_question);
+        setQuestionText(resp.next_question || "");
         setTranscript("");
         if (resp.audio_base64) {
           setAgentSpeaking(true);
@@ -389,8 +402,10 @@ export default function AiDiagnosis() {
       }
     } catch (e) {
       setError("Error: " + (e?.response?.data?.detail || e.message));
+    } finally {
+      setSubmitting(false);
     }
-  }, [sessionId, questionKey, transcript, questionIndex]);
+  }, [sessionId, questionKey, transcript, questionIndex, submitting]);
 
   const startOver = () => {
     setScreen("welcome");
@@ -399,8 +414,10 @@ export default function AiDiagnosis() {
     setDiagnosis(null);
     setIsEmergency(false);
     setError(null);
+    setProcessingError(null);
     setQuestionIndex(0);
     setRecState("idle");
+    setSubmitting(false);
     setAgentSpeaking(false);
   };
 
@@ -524,6 +541,47 @@ export default function AiDiagnosis() {
     );
   }
 
+  if (screen === "analyze-error") {
+    return (
+      <div className="aid-page aid-center">
+        <div className="panel aid-analysis-error">
+          <AlertTriangle size={40} className="aid-error-icon" />
+          <h3>Analysis could not be completed</h3>
+          <p className="aid-body-text" style={{ marginTop: "0.5rem" }}>
+            {processingError || "An unexpected error occurred while analysing your answers."}
+          </p>
+          <p className="muted" style={{ fontSize: "0.82rem", marginTop: "0.75rem" }}>
+            Your 10 answers were saved. You can retry the analysis or start a new session.
+          </p>
+          <div className="aid-btn-row" style={{ marginTop: "1.25rem" }}>
+            <button
+              className="aid-btn aid-btn-primary"
+              onClick={async () => {
+                setProcessingError(null);
+                setScreen("processing");
+                try {
+                  const dx = await aiAnalyze(sessionId);
+                  setDiagnosis(dx);
+                  if (dx.urgency === "emergency") setIsEmergency(true);
+                  setScreen("results");
+                } catch (e) {
+                  const detail = e?.response?.data?.detail || e.message || "Analysis failed";
+                  setProcessingError(detail);
+                  setScreen("analyze-error");
+                }
+              }}
+            >
+              <RefreshCw size={16} /> Retry analysis
+            </button>
+            <button className="aid-btn aid-btn-outline" onClick={startOver}>
+              Start over
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (screen === "results" && diagnosis) {
     return (
       <DiagnosisResults
@@ -602,9 +660,12 @@ export default function AiDiagnosis() {
         <button
           className="aid-btn aid-btn-primary"
           onClick={submitAnswer}
-          disabled={!transcript.trim() || recState !== "idle" || agentSpeaking}
+          disabled={!transcript.trim() || recState !== "idle" || agentSpeaking || submitting}
         >
-          {questionIndex < 9 ? "Next" : "Analyse"} <ChevronRight size={18} />
+          {submitting
+            ? (questionIndex < 9 ? "Saving…" : "Analysing…")
+            : (questionIndex < 9 ? "Next" : "Analyse")}
+          {!submitting && <ChevronRight size={18} />}
         </button>
       </div>
     </div>

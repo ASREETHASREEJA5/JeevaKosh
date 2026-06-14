@@ -1,10 +1,10 @@
 """
 In-memory session store for AI Diagnosis voice interview sessions.
-Sessions are lost on server restart — this is intentional (no PII persistence).
+Sessions are lost on server restart — intentional (no PII persistence).
 """
 import uuid
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from backend.voice_agent_prompts import QUESTIONS
 
@@ -15,10 +15,18 @@ class DiagnosisSession:
         self.language = language
         self.current_question_index = 0
         self.answers: Dict[str, str] = {}
-        self.status = "active"  # "active" | "complete" | "emergency"
+        self.status = "active"       # "active" | "complete" | "emergency"
         self.created_at = datetime.utcnow()
 
+        # Pre-translated question scripts are stored here after session start.
+        # Falls back to the original English scripts if not set.
+        self.translated_questions: List[str] = []
+
     def get_current_question_text(self) -> Optional[str]:
+        """Return the current question text in the session's language."""
+        if self.translated_questions and self.current_question_index < len(self.translated_questions):
+            return self.translated_questions[self.current_question_index]
+        # Fallback: return original English script
         if self.current_question_index < len(QUESTIONS):
             return QUESTIONS[self.current_question_index]["script"]
         return None
