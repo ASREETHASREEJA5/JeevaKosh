@@ -49,6 +49,8 @@ export const authMe = () => api.get('/auth/me').then(r => r.data)
 
 export const fetchHospitals = () => api.get('/hospitals/').then(r => r.data)
 
+export const fetchDashboard = () => api.get('/dashboard/').then(r => r.data)
+
 export const fetchHospital = id => api.get(`/hospitals/${id}`).then(r => r.data)
 
 export const createHospital = name => api.post('/hospitals/', { name }).then(r => r.data)

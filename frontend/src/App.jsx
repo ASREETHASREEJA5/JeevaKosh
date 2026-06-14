@@ -21,6 +21,7 @@ import {
   Home,
   Hospital,
   KeyRound,
+  LayoutDashboard,
   LockKeyhole,
   LogOut,
   MapPin,
@@ -48,14 +49,11 @@ import Landing from "./pages/Landing.jsx";
 import Patients from "./pages/Patients.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Hospitals from "./pages/Hospitals.jsx";
-import Specialties from "./pages/Specialties.jsx";
-import Doctors from "./pages/Doctors.jsx";
-import Slots from "./pages/Slots.jsx";
-import Report from "./pages/Report.jsx";
 import HospitalVault from "./pages/HospitalVault.jsx";
 import ReportFoldersPage from "./pages/ReportFoldersPage.jsx";
 import Documents from "./pages/Documents.jsx";
 import Chat from "./pages/Chat.jsx";
+import HealthDashboard from "./pages/HealthDashboard.jsx";
 
 const h = React.createElement;
 const iconProps = { size: 22, strokeWidth: 2.1, "aria-hidden": true };
@@ -225,9 +223,7 @@ const navIcons = {
   Home,
   Patients: Users,
   Hospitals: Hospital,
-  Specialties: Stethoscope,
-  Reports: FileText,
-  Bills: ReceiptText,
+  Dashboard: LayoutDashboard,
   Chat: MessageCircle,
 };
 
@@ -386,14 +382,8 @@ function App() {
       h(AppShell, { active: "Hospitals", logout, navigate, user }, h(Documents, { hospital: activeHospital, vaultFolder, selectedReportFolder, navigate, setToast })),
     screen === "chat" &&
       h(AppShell, { active: "Chat", logout, navigate, user }, h(Chat, { navigate })),
-    screen === "specialties" &&
-      h(AppShell, { active: "Specialties", logout, navigate, user }, h(Specialties, commonProps)),
-    screen === "doctors" &&
-      h(AppShell, { active: "Specialties", logout, navigate, user }, h(Doctors, commonProps)),
-    screen === "slots" &&
-      h(AppShell, { active: "Specialties", logout, navigate, user }, h(Slots, commonProps)),
-    screen === "report" &&
-      h(AppShell, { active: "Reports", logout, navigate, user }, h(Report, commonProps)),
+    screen === "health-dashboard" &&
+      h(AppShell, { active: "Dashboard", logout, navigate, user }, h(HealthDashboard)),
     authMode &&
       h(AuthModal, {
         mode: authMode,
@@ -499,7 +489,7 @@ function SelectField({ label, name, options }) {
 }
 
 function AppShell({ active, logout, navigate, user, children }) {
-  const items = ["Home", "Patients", "Hospitals", "Chat", "Specialties", "Reports"];
+  const items = ["Home", "Patients", "Hospitals", "Chat", "Dashboard"];
   return h(
     "div",
     { className: "app-layout" },
@@ -520,7 +510,7 @@ function AppShell({ active, logout, navigate, user, children }) {
 }
 
 function SideButton({ item, active, navigate }) {
-  const routes = { Home: "dashboard", Patients: "patients", Hospitals: "hospitals", Chat: "chat", Specialties: "specialties", Reports: "report" };
+  const routes = { Home: "dashboard", Patients: "patients", Hospitals: "hospitals", Chat: "chat", Dashboard: "health-dashboard" };
   return h("button", { className: active === item ? "active" : "", onClick: () => navigate(routes[item]) }, h(Icon, { icon: navIcons[item] || MessageCircle }), item);
 }
 
