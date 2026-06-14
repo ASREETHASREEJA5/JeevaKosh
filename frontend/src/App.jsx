@@ -46,8 +46,6 @@ import Icon, { IconBadge, HeartPulse } from "./components/Icon.jsx";
 import PageHead from "./components/PageHead.jsx";
 import AddPatientModal from "./components/AddPatientModal.jsx";
 import Landing from "./pages/Landing.jsx";
-import Patients from "./pages/Patients.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
 import Hospitals from "./pages/Hospitals.jsx";
 import HospitalVault from "./pages/HospitalVault.jsx";
 import ReportFoldersPage from "./pages/ReportFoldersPage.jsx";
@@ -55,6 +53,7 @@ import Documents from "./pages/Documents.jsx";
 import Chat from "./pages/Chat.jsx";
 import HealthDashboard from "./pages/HealthDashboard.jsx";
 import Profile from "./pages/Profile.jsx";
+import AiDiagnosis from "./pages/AiDiagnosis.jsx";
 
 const h = React.createElement;
 const iconProps = { size: 22, strokeWidth: 2.1, "aria-hidden": true };
@@ -221,12 +220,11 @@ const actionIcons = {
 };
 
 const navIcons = {
-  Home,
-  Patients: Users,
-  Hospitals: Hospital,
-  Profile: UserRound,
   Dashboard: LayoutDashboard,
+  "Medical Repository": Hospital,
   Chat: MessageCircle,
+  "AI Diagnosis": Stethoscope,
+  Profile: UserRound,
 };
 
 const metricIcons = {
@@ -265,7 +263,7 @@ function App() {
 
   useEffect(() => {
     if (!loading && user && screen === "landing") {
-      setScreen("dashboard");
+      setScreen("health-dashboard");
     }
   }, [loading, user, screen]);
 
@@ -281,7 +279,7 @@ function App() {
 
   function completeAuth() {
     setAuthMode(null);
-    setScreen("dashboard");
+    setScreen("health-dashboard");
   }
 
   function logout() {
@@ -370,33 +368,27 @@ function App() {
     null,
     screen === "landing" &&
       h(Landing, { slide, setSlide, openAuth, visitorCards, features, recordTypes, trustPoints, useCases, doctors, faqs, articleCards, visitorIcons, featureIcons, recordIcons, metricIcons, trustIcons }),
-    screen === "patients" &&
-      h(AppShell, { active: "Patients", logout, navigate, user }, h(Patients, commonProps)),
-    screen === "dashboard" &&
-      h(AppShell, { active: "Home", logout, navigate, user }, h(Dashboard, { ...commonProps, apiHospitals })),
     screen === "hospitals" &&
-      h(AppShell, { active: "Hospitals", logout, navigate, user }, h(Hospitals, commonProps)),
+      h(AppShell, { active: "Medical Repository", logout, navigate, user }, h(Hospitals, commonProps)),
     screen === "hospital-vault" &&
-      h(AppShell, { active: "Hospitals", logout, navigate, user }, h(HospitalVault, { hospital: activeHospital, navigate, setVaultFolder })),
+      h(AppShell, { active: "Medical Repository", logout, navigate, user }, h(HospitalVault, { hospital: activeHospital, navigate, setVaultFolder })),
     screen === "report-folders" &&
-      h(AppShell, { active: "Hospitals", logout, navigate, user }, h(ReportFoldersPage, { hospital: activeHospital, navigate, setSelectedReportFolder })),
+      h(AppShell, { active: "Medical Repository", logout, navigate, user }, h(ReportFoldersPage, { hospital: activeHospital, navigate, setSelectedReportFolder })),
     screen === "documents" &&
-      h(AppShell, { active: "Hospitals", logout, navigate, user }, h(Documents, { hospital: activeHospital, vaultFolder, selectedReportFolder, navigate, setToast })),
+      h(AppShell, { active: "Medical Repository", logout, navigate, user }, h(Documents, { hospital: activeHospital, vaultFolder, selectedReportFolder, navigate, setToast })),
     screen === "chat" &&
       h(AppShell, { active: "Chat", logout, navigate, user }, h(Chat, { navigate })),
     screen === "health-dashboard" &&
-<<<<<<< HEAD
-      h(AppShell, { active: "Dashboard", logout, navigate, user }, h(HealthDashboard)),
-    screen === "profile" &&
-      h(AppShell, { active: "Profile", logout, navigate, user }, h(Profile, { user })),
-=======
       h(AppShell, { active: "Dashboard", logout, navigate, user }, h(HealthDashboard, {
         navigate,
         setActiveHospital,
         setVaultFolder,
         setSelectedReportFolder,
       })),
->>>>>>> cc7f9fd (Initial commmit)
+    screen === "ai-diagnosis" &&
+      h(AppShell, { active: "AI Diagnosis", logout, navigate, user }, h(AiDiagnosis)),
+    screen === "profile" &&
+      h(AppShell, { active: "Profile", logout, navigate, user }, h(Profile, { user })),
     authMode &&
       h(AuthModal, {
         mode: authMode,
@@ -502,7 +494,7 @@ function SelectField({ label, name, options }) {
 }
 
 function AppShell({ active, logout, navigate, user, children }) {
-  const items = ["Home", "Patients", "Hospitals", "Profile", "Chat", "Dashboard"];
+  const items = ["Dashboard", "Medical Repository", "Chat", "AI Diagnosis", "Profile"];
   return h(
     "div",
     { className: "app-layout" },
@@ -523,7 +515,13 @@ function AppShell({ active, logout, navigate, user, children }) {
 }
 
 function SideButton({ item, active, navigate }) {
-  const routes = { Home: "dashboard", Patients: "patients", Hospitals: "hospitals", Profile: "profile", Chat: "chat", Dashboard: "health-dashboard" };
+  const routes = {
+    Dashboard: "health-dashboard",
+    "Medical Repository": "hospitals",
+    Chat: "chat",
+    "AI Diagnosis": "ai-diagnosis",
+    Profile: "profile",
+  };
   return h("button", { className: active === item ? "active" : "", onClick: () => navigate(routes[item]) }, h(Icon, { icon: navIcons[item] || MessageCircle }), item);
 }
 

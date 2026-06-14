@@ -130,7 +130,7 @@ export default function Chat({ navigate }) {
         action={
           <Button
             variant="ghost"
-            onClick={() => navigate('dashboard')}
+            onClick={() => navigate('health-dashboard')}
           >
             Back home
           </Button>

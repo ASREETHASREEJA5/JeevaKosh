@@ -2637,3 +2637,38 @@ textarea {
 .profile-list-item .form-grid {
   margin-bottom: 0;
 }
+
+.profile-view-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-view-field.full {
+  grid-column: 1 / -1;
+}
+
+.profile-view-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.profile-view-value {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.profile-view-value.block {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.profile-view-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
