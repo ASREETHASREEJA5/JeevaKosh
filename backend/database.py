@@ -18,6 +18,7 @@ users_col = db["users"]
 hospitals_col = db["hospitals"]
 documents_col = db["documents"]
 report_folders_col = db["report_folders"]   # user-defined sub-folders inside Reports
+profiles_col = db["profiles"]               # patient portfolio (one doc per user)
 
 
 async def create_indexes() -> None:
@@ -55,6 +56,9 @@ async def create_indexes() -> None:
     await report_folders_col.create_index(
         [("hospital_id", 1), ("user_id", 1), ("slug", 1)], unique=True
     )
+
+    # ── Patient Profiles ──────────────────────────────────────────────────────
+    await profiles_col.create_index("user_id", unique=True)
 
 
 async def create_vector_search_index() -> None:

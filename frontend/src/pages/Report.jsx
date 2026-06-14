@@ -168,6 +168,10 @@ export default function Report(props) {
             </div>
             <div>ug/dL</div>
           </div>
+        </div>
+
+        <div className="result-graph-card report-card" aria-label="Lead level reference range">
+          <h4>Reference Range</h4>
           <div className="result-graph" aria-hidden>
             <div className="graph-bar">
               <div className="graph-pointer" />

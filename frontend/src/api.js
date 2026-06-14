@@ -51,6 +51,10 @@ export const fetchHospitals = () => api.get('/hospitals/').then(r => r.data)
 
 export const fetchDashboard = () => api.get('/dashboard/').then(r => r.data)
 
+export const fetchProfile = () => api.get('/profile/').then(r => r.data)
+
+export const updateProfile = (profile) => api.put('/profile/', profile).then(r => r.data)
+
 export const fetchHospital = id => api.get(`/hospitals/${id}`).then(r => r.data)
 
 export const createHospital = name => api.post('/hospitals/', { name }).then(r => r.data)

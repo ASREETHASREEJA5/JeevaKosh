@@ -129,9 +129,11 @@ def _chart_data_for_type(items: list, report_type: str) -> dict:
         key: {"unit": None, "reference_range": None, "points": []}
         for key in allowed_keys
     }
+    items_by_id = {item["document_id"]: item for item in items}
 
     for item in items:
         upload_date = item.get("upload_date")
+        report_label = item.get("original_filename") or f"Report {item['document_id'][:8]}"
         for ocr in _extract_result_blocks(item["ocr_data"]):
             date = _report_date(ocr, upload_date)
 
@@ -157,6 +159,7 @@ def _chart_data_for_type(items: list, report_type: str) -> dict:
                             "value": value,
                             "raw_result": str(raw_value) if raw_value is not None else None,
                             "document_id": item["document_id"],
+                            "report_label": report_label,
                         }
                     )
                 continue
@@ -183,6 +186,7 @@ def _chart_data_for_type(items: list, report_type: str) -> dict:
                         "value": value,
                         "raw_result": lab.get("result"),
                         "document_id": item["document_id"],
+                        "report_label": report_label,
                     }
                 )
 
@@ -192,12 +196,14 @@ def _chart_data_for_type(items: list, report_type: str) -> dict:
         if not data["points"]:
             continue
         points = sorted(data["points"], key=lambda p: p.get("date") or "")
+        source_reports = _source_reports_for_points(points, items_by_id)
         metrics.append(
             {
                 "test_name": test_name,
                 "unit": data["unit"],
                 "reference_range": data["reference_range"],
                 "points": points,
+                "source_reports": source_reports,
             }
         )
 
@@ -205,6 +211,32 @@ def _chart_data_for_type(items: list, report_type: str) -> dict:
         "report_count": len(items),
         "metrics": metrics,
     }
+
+
+def _source_reports_for_points(points: list, items_by_id: dict) -> list[dict]:
+    seen: set[str] = set()
+    sources: list[dict] = []
+
+    for point in points:
+        document_id = point.get("document_id")
+        if not document_id or document_id in seen:
+            continue
+        seen.add(document_id)
+
+        item = items_by_id.get(document_id) or {}
+        sources.append(
+            {
+                "document_id": document_id,
+                "filename": item.get("original_filename") or point.get("report_label"),
+                "report_date": point.get("date"),
+                "hospital_id": item.get("hospital_id"),
+                "hospital_name": item.get("hospital_name"),
+                "report_folder_id": item.get("report_folder_id"),
+                "report_folder_name": item.get("report_folder_name"),
+            }
+        )
+
+    return sorted(sources, key=lambda s: s.get("report_date") or "")
 
 
 def _build_charts(reports: list) -> dict:
@@ -219,6 +251,11 @@ def _build_charts(reports: list) -> dict:
         by_type[report_type].append(
             {
                 "document_id": str(report["_id"]),
+                "original_filename": report.get("original_filename"),
+                "hospital_id": report.get("hospital_id"),
+                "hospital_name": report.get("hospital_name"),
+                "report_folder_id": report.get("report_folder_id"),
+                "report_folder_name": report.get("report_folder_name"),
                 "ocr_data": ocr_data,
                 "upload_date": report.get("upload_date"),
             }

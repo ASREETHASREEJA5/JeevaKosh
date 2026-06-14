@@ -2,13 +2,36 @@ import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard } from "lucide-react";
 import PageHead from "../components/PageHead.jsx";
 import ReportCharts from "../components/ReportCharts.jsx";
-import { fetchDashboard } from "../api";
+import { fetchDashboard, previewUrl } from "../api";
 
-export default function HealthDashboard() {
+export default function HealthDashboard({
+  navigate,
+  setActiveHospital,
+  setVaultFolder,
+  setSelectedReportFolder,
+}) {
   const { data: dashboard, isLoading, error } = useQuery({
     queryKey: ["dashboard"],
     queryFn: fetchDashboard,
   });
+
+  function openReport(report) {
+    if (!report.hospital_id || !report.report_folder_id) {
+      window.open(previewUrl(report.document_id), "_blank");
+      return;
+    }
+
+    setActiveHospital?.({
+      id: report.hospital_id,
+      name: report.hospital_name || "Hospital",
+    });
+    setVaultFolder?.("reports");
+    setSelectedReportFolder?.({
+      id: report.report_folder_id,
+      name: report.report_folder_name || "Reports",
+    });
+    navigate?.("documents");
+  }
 
   return (
     <div className="health-dashboard">
@@ -38,6 +61,7 @@ export default function HealthDashboard() {
             key={reportType}
             reportType={reportType}
             chartData={dashboard.charts[reportType]}
+            onOpenReport={openReport}
           />
         ))}
       </div>

@@ -7,18 +7,90 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ExternalLink, FileText } from "lucide-react";
+import { previewUrl } from "../api";
 
-function MetricChart({ metric }) {
+function ChartTooltip({ active, payload, label, unit }) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload;
+
+  return (
+    <div className="chart-tooltip">
+      <p className="chart-tooltip-date">{label}</p>
+      <p className="chart-tooltip-value">
+        {point.raw_result ?? payload[0].value}
+        {unit ? ` ${unit}` : ""}
+      </p>
+      {point.report_label && (
+        <p className="chart-tooltip-report">{point.report_label}</p>
+      )}
+    </div>
+  );
+}
+
+function SourceReports({ reports, onOpenReport }) {
+  if (!reports?.length) return null;
+
+  return (
+    <div className="chart-source-reports">
+      <p className="chart-source-label">Source reports</p>
+      <ul className="chart-source-list">
+        {reports.map((report) => (
+          <li key={report.document_id} className="chart-source-item">
+            <div className="chart-source-meta">
+              <FileText size={14} aria-hidden />
+              <span className="chart-source-name" title={report.filename}>
+                {report.filename}
+              </span>
+              {report.report_date && (
+                <span className="chart-source-date">{report.report_date}</span>
+              )}
+            </div>
+            <div className="chart-source-actions">
+              <button
+                type="button"
+                className="chart-source-link"
+                onClick={() => window.open(previewUrl(report.document_id), "_blank")}
+              >
+                Preview
+              </button>
+              {onOpenReport && (
+                <button
+                  type="button"
+                  className="chart-source-link"
+                  onClick={() => onOpenReport(report)}
+                >
+                  <ExternalLink size={12} aria-hidden />
+                  Open
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MetricChart({ metric, reportType, reportCount, onOpenReport }) {
   const label = metric.unit
     ? `${metric.test_name} (${metric.unit})`
     : metric.test_name;
 
   return (
-    <div className="metric-chart">
-      <h4>{label}</h4>
-      {metric.reference_range && (
-        <p className="chart-meta">Reference: {metric.reference_range}</p>
-      )}
+    <article className="report-card metric-chart-card">
+      <header className="metric-chart-header">
+        <div>
+          <p className="metric-chart-type">{reportType}</p>
+          <h4>{label}</h4>
+          {metric.reference_range && (
+            <p className="chart-meta">Reference: {metric.reference_range}</p>
+          )}
+        </div>
+        <span className="report-count">
+          {reportCount} report{reportCount !== 1 ? "s" : ""}
+        </span>
+      </header>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={metric.points} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
@@ -34,11 +106,7 @@ function MetricChart({ metric }) {
             }}
           />
           <Tooltip
-            labelFormatter={(date) => `Date: ${date}`}
-            formatter={(value, _name, props) => [
-              props.payload.raw_result ?? value,
-              metric.unit || "Value",
-            ]}
+            content={<ChartTooltip unit={metric.unit} />}
           />
           <Line
             type="monotone"
@@ -51,31 +119,42 @@ function MetricChart({ metric }) {
           />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+      <SourceReports reports={metric.source_reports} onOpenReport={onOpenReport} />
+    </article>
   );
 }
 
-export default function ReportCharts({ reportType, chartData }) {
+export default function ReportCharts({ reportType, chartData, onOpenReport }) {
   const { report_count, metrics } = chartData;
 
-  return (
-    <section className="report-card">
-      <header className="report-card-header">
-        <h3>{reportType}</h3>
-        <span className="report-count">
-          {report_count} report{report_count !== 1 ? "s" : ""}
-        </span>
-      </header>
-
-      {metrics.length > 0 ? (
-        <div className="metrics-grid">
-          {metrics.map((metric) => (
-            <MetricChart key={metric.test_name} metric={metric} />
-          ))}
-        </div>
-      ) : (
+  if (metrics.length === 0) {
+    return (
+      <article className="report-card metric-chart-card metric-chart-card--empty">
+        <header className="metric-chart-header">
+          <div>
+            <p className="metric-chart-type">{reportType}</p>
+            <h4>No chart data</h4>
+          </div>
+          <span className="report-count">
+            {report_count} report{report_count !== 1 ? "s" : ""}
+          </span>
+        </header>
         <p className="no-metrics">No numeric lab values to chart for this report type yet.</p>
-      )}
-    </section>
+      </article>
+    );
+  }
+
+  return (
+    <>
+      {metrics.map((metric) => (
+        <MetricChart
+          key={`${reportType}-${metric.test_name}`}
+          metric={metric}
+          reportType={reportType}
+          reportCount={report_count}
+          onOpenReport={onOpenReport}
+        />
+      ))}
+    </>
   );
 }
